@@ -15,6 +15,9 @@ class MessageError extends Error {
 const messageService = {
   async sendMessage(groupId: string, content: string): Promise<Message> {
     const encryptedContent = encryptMessage(content);
+    const userId = localStorage.getItem('userId');
+    const userName = localStorage.getItem('userName');
+
     try {
       const response = await api.post<Message>('/messages', {
         groupId,
@@ -24,13 +27,11 @@ const messageService = {
       // Ensure we're using the actual message data but with decrypted content
       const message = {
         ...response.data,
-        content: content // Return decrypted content for immediate display
+        content: content, // Return decrypted content for immediate display
+        senderId: userId!, // Use the current user's ID
+        senderName: userName!, // Add sender name
+        readBy: [userId!] // Initialize readBy with current user
       };
-      
-      // If senderId is populated, make sure we're using its _id
-      if (typeof message.senderId === 'object' && message.senderId !== null) {
-        message.senderId = message.senderId._id;
-      }
       
       return message;
     } catch (error: any) {

@@ -87,10 +87,12 @@ const handleSocketConnection = (socket: any) => {
   // Message events with error handling
   socket.on('send_message', async (data: MessageEvent) => {
     try {
-      io.to(data.groupId).emit('receive_message', {
-        ...data,
-        userId: socket.data.user.userId,
-        email: socket.data.user.email
+      // Forward the complete message object to all clients in the group
+      socket.to(data.groupId).emit('receive_message', {
+        ...data.message,
+        timestamp: new Date(),
+        senderId: socket.data.user.userId,
+        senderName: socket.data.user.email
       });
     } catch (error) {
       console.error('Error sending message:', error);

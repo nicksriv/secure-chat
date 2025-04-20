@@ -7,6 +7,8 @@ import { useGroupStore } from '../../stores/groupStore';
 import { EmojiPicker } from './EmojiPicker';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessages } from './ChatMessages';
+import { MessageItem } from './MessageItem';
+import { MessageInput } from './MessageInput';
 
 export const ChatWindow = () => {
   const [message, setMessage] = useState('');
@@ -140,33 +142,8 @@ export const ChatWindow = () => {
         />
       </div>
 
-      <div className="p-4 bg-white flex gap-2 border-t">
-        <EmojiPicker onSelectEmoji={handleSelectEmoji} />
-        <input
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          placeholder="Type a message..."
-          value={message}
-          onChange={(e) => {
-            setMessage(e.target.value);
-            handleTyping();
-          }}
-          onKeyPress={(e) => {
-            if (e.key === 'Enter') {
-              handleSendMessage();
-            }
-          }}
-        />
-        <button
-          className={`p-2 rounded-md text-white ${
-            message.trim() 
-              ? 'bg-blue-500 hover:bg-blue-600' 
-              : 'bg-gray-300 cursor-not-allowed'
-          }`}
-          onClick={handleSendMessage}
-          disabled={!message.trim()}
-        >
-          <IoSend className="h-5 w-5" />
-        </button>
+      <div className="border-t">
+        <MessageInput selectedGroupId={selectedGroup._id} />
       </div>
     </div>
   );

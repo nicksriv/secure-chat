@@ -37,9 +37,9 @@ export const ChatMessages: FC<Props> = ({
         <div className="p-3 bg-white border-t flex gap-2 items-center overflow-x-auto shadow-inner">
           <span className="text-xs font-medium text-gray-500 whitespace-nowrap">Quick replies:</span>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {smartReplies.map((reply, index) => (
+            {smartReplies.map((reply) => (
               <button
-                key={index}
+                key={`${reply.text}-${reply.confidence}`}
                 className="px-3 py-1.5 text-sm bg-indigo-50 text-indigo-700 border border-indigo-100 rounded-full hover:bg-indigo-100 transition-colors whitespace-nowrap flex-shrink-0"
                 onClick={() => onSelectSmartReply(reply.text)}
               >

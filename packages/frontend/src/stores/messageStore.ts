@@ -73,8 +73,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     });
 
     socket.on('receive_message', (message: Message) => {
+      // Ensure message has all required fields
+      const updatedMessage = {
+        ...message,
+        readBy: message.readBy || [message.senderId],
+        senderName: message.senderName || 'User'
+      };
+      
       set(state => ({
-        messages: [...state.messages, message]
+        messages: [...state.messages, updatedMessage]
       }));
     });
 
@@ -132,8 +139,15 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     try {
       const message = await messageService.sendMessage(groupId, content);
       const { socket } = get();
+      
       if (socket && socket.connected) {
-        socket.emit('send_message', { groupId, message });
+        socket.emit('send_message', { 
+          groupId, 
+          message: {
+            ...message,
+            readBy: message.readBy || [],  // Ensure readBy is never undefined
+          }
+        });
       } else {
         // If socket is disconnected, try to reconnect
         const store = get();
@@ -142,10 +156,17 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         setTimeout(() => {
           const { socket } = get();
           if (socket && socket.connected) {
-            socket.emit('send_message', { groupId, message });
+            socket.emit('send_message', { 
+              groupId, 
+              message: {
+                ...message,
+                readBy: message.readBy || [],
+              }
+            });
           }
         }, 1000);
       }
+      
       set(state => ({
         messages: [...state.messages, message],
         loading: false,

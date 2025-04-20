@@ -42,8 +42,14 @@ type Props = {
 
 export const MessageItem: FC<Props> = ({ msg, onRequestSmartReply }) => {
   const { user } = useAuthStore();
-  // Handle populated senderId which comes as an object with _id
-  const senderId = typeof msg.senderId === 'string' ? msg.senderId : msg.senderId._id;
+  
+  // Safely handle senderId which might be a string, object, or undefined
+  const senderId = msg.senderId 
+    ? (typeof msg.senderId === 'string' 
+      ? msg.senderId 
+      : msg.senderId._id)
+    : '';
+    
   const isSelf = user && senderId === user._id;
 
   let initials = 'UN';
@@ -57,6 +63,7 @@ export const MessageItem: FC<Props> = ({ msg, onRequestSmartReply }) => {
 
   // Don't show smart reply for system messages or your own messages
   const showSmartReply = !isSelf && 
+    msg.content && // Add null check here
     !msg.content.startsWith('SYSTEM:') && 
     msg.content.length > 0 &&
     msg.content.length < 200; // Don't show for very long messages
@@ -71,7 +78,7 @@ export const MessageItem: FC<Props> = ({ msg, onRequestSmartReply }) => {
         {msg.senderAvatar ? (
           <img
             src={msg.senderAvatar}
-            alt={msg.senderName}
+            alt={msg.senderName || 'User'}
             className="w-8 h-8 rounded-full object-cover"
             onError={(e) => {
               e.currentTarget.src = '';
@@ -94,7 +101,7 @@ export const MessageItem: FC<Props> = ({ msg, onRequestSmartReply }) => {
           </span>
           <div className="flex items-center">
             <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-              {msg.readBy.length} read
+              {msg.readBy?.length || 0} read
             </span>
             {showSmartReply && (
               <button
