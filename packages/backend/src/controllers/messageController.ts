@@ -7,6 +7,7 @@ import { Message } from '../models/Message';
 import { Group } from '../models/Group';
 import { encryptMessage, decryptMessage, decryptFrontendMessage, decryptMessageWithAES } from '../utils/encryption';
 import { TokenPayload } from '../types/index';
+import logger from '../utils/logger';
 
 interface AuthRequest extends Request {
   user?: TokenPayload;
@@ -18,10 +19,10 @@ const openai = new OpenAI({
 });
 
 const generateSmartReplies = async (messages: string[], debug = false): Promise<Array<{ text: string; confidence: number }>> => {
-  debug && console.log('generateSmartReplies called with messages:', messages);
+  debug && logger.info('generateSmartReplies called with messages:', messages);
   
   if (!process.env.OPENAI_API_KEY) {
-    debug && console.warn('OPENAI_API_KEY not set. Using fallback smart replies.');
+    debug && logger.warn('OPENAI_API_KEY not set. Using fallback smart replies.');
     return [
         { text: "Got it.", confidence: 0.5 },
         { text: "Okay", confidence: 0.5 },
@@ -31,10 +32,10 @@ const generateSmartReplies = async (messages: string[], debug = false): Promise<
 
   // Use the last 5 messages as context, ensure they are not empty
   const conversationHistory = messages.filter(msg => msg && msg.trim().length > 0).slice(-5);
-  debug && console.log('Filtered conversation history:', conversationHistory);
+  debug && logger.info('Filtered conversation history:', conversationHistory);
   
   if (conversationHistory.length === 0) {
-    console.warn('No valid message history for smart replies. Using fallback.');
+    logger.warn('No valid message history for smart replies. Using fallback.');
     return [
         { text: "Got it.", confidence: 0.5 },
         { text: "Okay", confidence: 0.5 },
@@ -44,7 +45,7 @@ const generateSmartReplies = async (messages: string[], debug = false): Promise<
 
   // The last message is the one we want replies for
   const lastMessage = conversationHistory[conversationHistory.length - 1];
-  console.log('Last message to reply to:', lastMessage);
+  logger.info('Last message to reply to:', lastMessage);
 
   // Format messages for the OpenAI API
   const apiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = conversationHistory.map((msg, index) => ({
@@ -52,13 +53,13 @@ const generateSmartReplies = async (messages: string[], debug = false): Promise<
     role: index % 2 === 0 ? 'user' : 'assistant', 
     content: msg,
   }));
-  console.log('Formatted API messages:', JSON.stringify(apiMessages, null, 2));
+  logger.info('Formatted API messages: %s', JSON.stringify(apiMessages, null, 2));
 
   const systemPrompt = `You are a helpful chat assistant. Based on the following conversation history, suggest 3 concise and relevant replies to the *last* message ("${lastMessage}"). Provide only the reply text, one reply per line, without any numbering or bullet points.`;
-  console.log('System prompt:', systemPrompt);
+  logger.info('System prompt:', systemPrompt);
 
   try {
-    console.log('Calling OpenAI API...');
+    logger.info('Calling OpenAI API...');
     const completion = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
       messages: [
@@ -70,11 +71,11 @@ const generateSmartReplies = async (messages: string[], debug = false): Promise<
       temperature: 0.7,
       stop: ["\n\n"],
     });
-    console.log('OpenAI API response:', JSON.stringify(completion, null, 2));
+    logger.info('OpenAI API response: %s', JSON.stringify(completion, null, 2));
 
     const content = completion.choices[0]?.message?.content;
     if (!content) {
-      console.error('OpenAI response content is empty. Using fallback replies.');
+      logger.error('OpenAI response content is empty. Using fallback replies.');
       return [
           { text: "Got it.", confidence: 0.5 },
           { text: "Okay", confidence: 0.5 },
@@ -83,18 +84,18 @@ const generateSmartReplies = async (messages: string[], debug = false): Promise<
     }
 
     const replies = content.trim().split('\n').map(text => text.trim()).filter(text => text.length > 0);
-    console.log('Parsed replies:', replies);
+    logger.info('Parsed replies:', replies);
 
     const formattedReplies = replies.slice(0, 3).map(text => ({
       text: text,
       confidence: 0.9
     }));
-    console.log('Formatted replies to return:', formattedReplies);
+    logger.info('Formatted replies to return:', formattedReplies);
 
     return formattedReplies;
 
   } catch (error) {
-    console.error('Error calling OpenAI API for smart replies:', error);
+    logger.error('Error calling OpenAI API for smart replies:', error);
     // Fallback replies if API fails
     return [
         { text: "Got it.", confidence: 0.5 },
@@ -106,7 +107,7 @@ const generateSmartReplies = async (messages: string[], debug = false): Promise<
 
 export const sendMessage = async (req: AuthRequest, res: Response) => {
   try {
-    console.log('Sending message:', req.body);
+    logger.info('Sending message:', req.body);
     if (!req.user?.userId) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
@@ -131,7 +132,7 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     try {
       encryptedContent = encryptMessage(content);
     } catch (encryptError) {
-      console.error('Message encryption failed:', encryptError);
+      logger.error('Message encryption failed:', encryptError);
       return res.status(500).json({ message: 'Failed to encrypt message' });
     }
 
@@ -143,10 +144,10 @@ export const sendMessage = async (req: AuthRequest, res: Response) => {
     });
 
     await message.save();
-    console.log('Message saved successfully:', message._id);
+    logger.info('Message saved successfully:', message._id);
     res.status(201).json(message);
   } catch (error) {
-    console.error('Error in sendMessage:', error);
+    logger.error('Error in sendMessage:', error);
     res.status(500).json({ 
       message: 'Error sending message', 
       error: error instanceof Error ? error.message : 'Unknown error' 
@@ -213,10 +214,10 @@ export const markAsRead = async (req: AuthRequest, res: Response) => {
 };
 
 export const getSmartReplies = async (req: AuthRequest, res: Response) => {
-  console.log('getSmartReplies endpoint called with messageId:', req.params.messageId);
+  logger.info('getSmartReplies endpoint called with messageId:', req.params.messageId);
   try {
     if (!req.user?.userId) {
-      console.log('User not authenticated');
+      logger.info('User not authenticated');
       return res.status(401).json({ message: 'User not authenticated' });
     }
 
@@ -225,10 +226,10 @@ export const getSmartReplies = async (req: AuthRequest, res: Response) => {
     // Get the target message first
     const targetMessage = await Message.findById(messageId);
     if (!targetMessage) {
-      console.log('Target message not found:', messageId);
+      logger.info('Target message not found:', messageId);
       return res.status(404).json({ message: 'Message not found' });
     }
-    console.log('Target message found:', targetMessage._id);
+    logger.info('Target message found:', targetMessage._id);
 
     // Get recent messages in a single query with proper sorting
     const recentMessagesDesc = await Message.find({ 
@@ -240,32 +241,32 @@ export const getSmartReplies = async (req: AuthRequest, res: Response) => {
     // Then reverse the array to get them in chronological order (oldest first)
     const recentMessages = recentMessagesDesc.reverse();
     
-    console.log('Recent messages found:', recentMessages.length);
-    console.log('Message IDs in order:', recentMessages.map(msg => msg._id));
+    logger.info('Recent messages found:', recentMessages.length);
+    logger.info('Message IDs in order:', recentMessages.map(msg => msg._id));
     
     // Decrypt all messages - Use the new decryptFrontendMessage function
     const decryptedContents = recentMessages.map(msg => {
       try {
         if (!msg.encryptedContent) {
-          console.error('No encryptedContent found for message:', msg._id);
+          logger.error('No encryptedContent found for message:', msg._id);
           return '';
         }
         // Try with the specialized frontend decryption function
         const decrypted = decryptMessageWithAES(msg.encryptedContent);
-        console.log(`Decrypted message ${msg._id}: ${decrypted.substring(0, 30)}${decrypted.length > 30 ? '...' : ''}`);
+        logger.info(`Decrypted message ${msg._id}: ${decrypted.substring(0, 30)}${decrypted.length > 30 ? '...' : ''}`);
         return decrypted;
       } catch (error) {
-        console.error('Error decrypting message:', msg._id, error);
+        logger.error('Error decrypting message:', msg._id, error);
         return ''; // Return empty string for messages that can't be decrypted
       }
     });
     
     // Filter out any empty messages
     const validDecryptedContents = decryptedContents.filter(content => content.trim() !== '');
-    console.log('Valid decrypted messages count:', validDecryptedContents.length);
+    logger.info('Valid decrypted messages count:', validDecryptedContents.length);
     
     if (validDecryptedContents.length === 0) {
-      console.warn('No valid decrypted messages for smart replies');
+      logger.warn('No valid decrypted messages for smart replies');
       return res.json({ 
         suggestions: [
           { text: "Got it.", confidence: 0.5 },
@@ -276,13 +277,13 @@ export const getSmartReplies = async (req: AuthRequest, res: Response) => {
     }
     
     // Generate smart replies based on conversation context
-    console.log('Calling generateSmartReplies with valid content...');
+    logger.info('Calling generateSmartReplies with valid content...');
     const smartReplies = await generateSmartReplies(validDecryptedContents);
-    console.log('Smart replies generated:', smartReplies);
+    logger.info('Smart replies generated:', smartReplies);
 
     res.json({ suggestions: smartReplies });
   } catch (error) {
-    console.error('Error generating smart replies:', error);
+    logger.error('Error generating smart replies:', error);
     res.status(500).json({ 
       message: 'Error generating smart replies', 
       error: error instanceof Error ? error.message : 'Unknown error' 

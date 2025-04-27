@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import logger from '../utils/logger';
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -29,7 +30,7 @@ export const sendResetPasswordEmail = async (to: string, resetToken: string) => 
   try {
     await transporter.sendMail(mailOptions);
   } catch (error) {
-    console.error('Failed to send reset password email:', error);
+    logger.error('Failed to send reset password email:', error);
     throw new Error('Failed to send reset password email');
   }
 };

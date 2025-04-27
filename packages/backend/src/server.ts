@@ -1,9 +1,10 @@
 import path from 'path';
 import dotenv from 'dotenv';
+import logger from './utils/logger';
 // Get the absolute path to the project root
 const rootDir = path.resolve(__dirname, '..');
 const envPath = path.join(rootDir, '.env');
-console.log('Loading .env file from:', envPath);
+logger.info('Loading .env file from:', envPath);
 dotenv.config({ path: envPath });
 
 import express from 'express';
@@ -43,11 +44,11 @@ interface MessageEvent {
 
 // Socket connection handler with error recovery
 const handleSocketConnection = (socket: any) => {
-  console.log('User connected:', socket.id, 'User data:', socket.data.user);
+  logger.info('User connected', { socketId: socket.id, user: socket.data.user });
 
   // Set up error handling
   socket.on('error', (error: Error) => {
-    console.error('Socket error for user:', socket.data.user?.email, error);
+    logger.error('Socket error for user', { email: socket.data.user?.email, error });
     // Don't disconnect on recoverable errors
     if (!(error instanceof TokenExpiredError)) {
       socket.emit('error', { message: 'An error occurred, attempting to reconnect...' });
@@ -56,10 +57,10 @@ const handleSocketConnection = (socket: any) => {
 
   // Handle disconnection
   socket.on('disconnect', (reason: string) => {
-    console.log('User disconnected:', socket.id, 'Reason:', reason);
+    logger.info('User disconnected', { socketId: socket.id, reason });
     // Handle reconnection for specific disconnect reasons
     if (reason === 'transport error' || reason === 'ping timeout') {
-      console.log('Allowing reconnection for:', socket.id);
+      logger.info('Allowing reconnection for', { socketId: socket.id });
     }
   });
 
@@ -67,9 +68,9 @@ const handleSocketConnection = (socket: any) => {
   socket.on('join_group', (groupId: string) => {
     try {
       socket.join(groupId);
-      console.log(`User ${socket.data.user.email} joined group ${groupId}`);
+      logger.info(`User ${socket.data.user.email} joined group ${groupId}`);
     } catch (error) {
-      console.error('Error joining group:', error);
+      logger.error('Error joining group', { error });
       socket.emit('error', { message: 'Failed to join group' });
     }
   });
@@ -77,9 +78,9 @@ const handleSocketConnection = (socket: any) => {
   socket.on('leave_group', (groupId: string) => {
     try {
       socket.leave(groupId);
-      console.log(`User ${socket.data.user.email} left group ${groupId}`);
+      logger.info(`User ${socket.data.user.email} left group ${groupId}`);
     } catch (error) {
-      console.error('Error leaving group:', error);
+      logger.error('Error leaving group', { error });
       socket.emit('error', { message: 'Failed to leave group' });
     }
   });
@@ -87,7 +88,7 @@ const handleSocketConnection = (socket: any) => {
   // Message events with error handling
   socket.on('send_message', async (data: MessageEvent) => {
     try {
-      console.log(`Broadcasting message to group ${data.groupId}`, data.message);
+      logger.info('Broadcasting message to group', { groupId: data.groupId, message: data.message });
       
       // Make sure group ID is a string for socket.io rooms
       const roomId = String(data.groupId);
@@ -101,7 +102,7 @@ const handleSocketConnection = (socket: any) => {
         senderName: socket.data.user.email || 'User'
       });
     } catch (error) {
-      console.error('Error sending message:', error);
+      logger.error('Error sending message', { error });
       socket.emit('error', { message: 'Failed to send message' });
     }
   });
@@ -115,7 +116,7 @@ const handleSocketConnection = (socket: any) => {
         email: socket.data.user.email
       });
     } catch (error) {
-      console.error('Error handling typing event:', error);
+      logger.error('Error handling typing event', { error });
       // Don't emit error for typing events as they're not critical
     }
   });
@@ -123,7 +124,7 @@ const handleSocketConnection = (socket: any) => {
   // Add socket event for message read status
   socket.on('mark_read', async (data: { messageId: string, groupId: string }) => {
     try {
-      console.log(`User ${socket.data.user.email} marked message ${data.messageId} as read`);
+      logger.info('User marked message as read', { email: socket.data.user.email, messageId: data.messageId });
       
       // Broadcast read status to all clients in the group
       io.to(data.groupId).emit('message_read', {
@@ -132,7 +133,7 @@ const handleSocketConnection = (socket: any) => {
         userName: socket.data.user.email
       });
     } catch (error) {
-      console.error('Error marking message as read:', error);
+      logger.error('Error marking message as read', { error });
     }
   });
 };
@@ -158,7 +159,7 @@ io.use((socket: any, next) => {
 
 // Socket.io error handling for the server
 io.engine.on('connection_error', (err) => {
-  console.log('Socket.io connection error:', err);
+  logger.info('Socket.io connection error', { err });
 });
 
 // Middleware
@@ -176,7 +177,7 @@ app.use('/api/messages', messageRoutes);
 
 // Error handling middleware
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
+  logger.error(err.stack);
   res.status(500).json({ message: 'Something went wrong!' });
 });
 
@@ -185,12 +186,12 @@ const connectDB = async (retries = 5, timeout = 5000) => {
   for (let i = 0; i < retries; i++) {
     try {
       await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/secure-chat');
-      console.log('Connected to MongoDB successfully');
+      logger.info('Connected to MongoDB successfully');
       return;
     } catch (err) {
-      console.error(`MongoDB connection attempt ${i + 1} failed:`, err);
+      logger.error(`MongoDB connection attempt ${i + 1} failed`, { err });
       if (i === retries - 1) {
-        console.error('Max retries reached. Exiting...');
+        logger.error('Max retries reached. Exiting...');
         process.exit(1);
       }
       await new Promise(resolve => setTimeout(resolve, timeout));
@@ -207,9 +208,9 @@ const PORT = process.env.PORT || 5000;
 // Initialize database and start server
 connectDB().then(() => {
   httpServer.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info(`Server running on port ${PORT}`);
   });
 }).catch(err => {
-  console.error('Failed to start server:', err);
+  logger.error('Failed to start server', { err });
   process.exit(1);
 });
