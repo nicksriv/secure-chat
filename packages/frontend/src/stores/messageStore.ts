@@ -6,6 +6,7 @@ import { Message, SmartReply } from '../types';
 interface MessageState {
   messages: Message[];
   loading: boolean;
+  loadingSmartReplies: boolean; // Add separate loading state for smart replies
   error: string | null;
   socket: Socket | null;
   socketError: string | null;
@@ -23,6 +24,7 @@ interface MessageState {
   markAsRead: (messageId: string) => Promise<void>;
   setTyping: (groupId: string, userId: string) => void;
   getSmartReplies: (messageId: string) => Promise<void>;
+  clearSmartReplies: () => void;
   setTypingStatus: (groupId: string, isTyping: boolean) => void;
   getUnreadCountForGroup: (groupId: string) => number;
   markAllAsReadInGroup: (groupId: string) => Promise<void>;
@@ -32,6 +34,7 @@ interface MessageState {
 export const useMessageStore = create<MessageState>((set, get) => ({
   messages: [],
   loading: false,
+  loadingSmartReplies: false, // Initialize the new loading state
   error: null,
   socket: null,
   socketError: null,
@@ -157,6 +160,11 @@ export const useMessageStore = create<MessageState>((set, get) => ({
             : msg
         )
       }));
+    });
+
+    // Debug: Listen to all socket events
+    socket.onAny((event, ...args) => {
+      console.log('[SOCKET EVENT]', event, ...args);
     });
 
     set({ socket });
@@ -292,18 +300,22 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   },
 
   getSmartReplies: async (messageId: string) => {
-    set({ loading: true, error: null, smartReplies: [] }); // Clear existing replies immediately
+    set({ loadingSmartReplies: true, error: null }); // Use the new loading state instead of general loading
     try {
       const suggestions = await messageService.getSmartReplies(messageId);
       // Sort by confidence and only show high confidence replies
       const filteredSuggestions = suggestions
         .filter(s => s.confidence > 0.7)
         .sort((a, b) => b.confidence - a.confidence);
-      set({ smartReplies: filteredSuggestions, loading: false });
+      set({ smartReplies: filteredSuggestions, loadingSmartReplies: false });
     } catch (error) {
       console.error('Smart reply error:', error);
-      set({ smartReplies: [], error: 'Failed to get smart replies', loading: false });
+      set({ smartReplies: [], error: 'Failed to get smart replies', loadingSmartReplies: false });
     }
+  },
+
+  clearSmartReplies: () => {
+    set({ smartReplies: [] });
   },
 
   setTypingStatus: (groupId: string, isTyping: boolean) => {

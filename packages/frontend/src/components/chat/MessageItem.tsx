@@ -106,9 +106,12 @@ export const MessageItem: FC<Props> = ({ msg, onRequestSmartReply }) => {
             {showSmartReply && (
               <button
                 onClick={onRequestSmartReply}
-                className="text-xs text-blue-500 hover:text-blue-600 hover:underline ml-2 transition-colors"
-                title="Get AI-suggested responses"
+                className="text-xs flex items-center text-blue-500 hover:text-blue-600 hover:underline ml-2 transition-colors"
+                title="Get AI-suggested responses based on conversation context"
               >
+                <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z"></path>
+                </svg>
                 Smart Reply
               </button>
             )}

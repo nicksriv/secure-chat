@@ -1,72 +1,49 @@
 // components/chat/MessageInput.tsx
-import { FC, useState, useRef } from 'react';
+import { FC, useState, useRef, RefObject } from 'react';
 import { IoSend } from 'react-icons/io5';
-import { useMessageStore } from '../../stores/messageStore';
-import { useAuthStore } from '../../stores/authStore';
 import { EmojiPicker } from './EmojiPicker';
 
 type Props = {
-  selectedGroupId: string;
+  message: string;
+  setMessage: (message: string) => void;
+  onSendMessage: () => void;
+  onTyping: () => void;
+  onSelectEmoji: (emoji: string) => void;
+  inputRef?: RefObject<HTMLTextAreaElement>; // Add inputRef prop
 };
 
-export const MessageInput: FC<Props> = ({ selectedGroupId }) => {
-  const [message, setMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const { sendMessage, setTypingStatus } = useMessageStore();
-  const { user } = useAuthStore();
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-
-  const handleSendMessage = async () => {
-    if (!message.trim() || !selectedGroupId || !user) return;
-
-    try {
-      await sendMessage(selectedGroupId, message);
-      setMessage('');
-    } catch (error) {
-      console.error('Failed to send message:', error);
-    }
-  };
-
-  const handleTyping = () => {
-    if (!selectedGroupId || !user) return;
-
-    if (!isTyping) {
-      setIsTyping(true);
-      setTypingStatus(selectedGroupId, true);
-    }
-
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    typingTimeoutRef.current = setTimeout(() => {
-      setIsTyping(false);
-      setTypingStatus(selectedGroupId, false);
-    }, 2000);
-  };
-
+export const MessageInput: FC<Props> = ({ 
+  message, 
+  setMessage, 
+  onSendMessage, 
+  onTyping,
+  onSelectEmoji,
+  inputRef
+}) => {
   return (
     <div className="flex items-center p-4 bg-white border-t">
-      <EmojiPicker onSelectEmoji={(emoji) => setMessage(prev => prev + emoji)} />
-      <input
-        type="text"
+      <EmojiPicker onSelectEmoji={onSelectEmoji} />
+      <textarea
+        ref={inputRef} // Use the inputRef here
         value={message}
         onChange={(e) => {
           setMessage(e.target.value);
-          handleTyping();
+          onTyping();
         }}
         onKeyPress={(e) => {
-          if (e.key === 'Enter') {
-            handleSendMessage();
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); // Prevent new line on Enter without shift
+            onSendMessage();
           }
         }}
         placeholder="Type a message..."
-        className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        rows={1}
+        className="flex-1 p-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 min-h-[40px] max-h-[120px] resize-y"
       />
       <button
-        onClick={handleSendMessage}
+        onClick={onSendMessage}
         disabled={!message.trim()}
-        className={`p-2 rounded-md text-white ${
+        className={`ml-2 p-2 rounded-md text-white ${
           message.trim() ? 'bg-blue-500 hover:bg-blue-600' : 'bg-gray-300 cursor-not-allowed'
         }`}
       >

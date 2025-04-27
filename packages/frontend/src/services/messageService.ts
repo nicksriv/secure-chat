@@ -69,10 +69,13 @@ const messageService = {
 
   async getSmartReplies(messageId: string): Promise<SmartReply[]> {
     try {
+      console.log(`Requesting smart replies for message ${messageId}`);
       const response = await api.get<{ suggestions: SmartReply[] }>(`/messages/${messageId}/smart-replies`);
+      console.log(`Received ${response.data.suggestions.length} smart reply suggestions`);
       return response.data.suggestions;
     } catch (error: any) {
       const message = error.response?.data?.message || 'Failed to get smart replies';
+      console.error('Smart reply error:', error);
       throw new MessageError(message);
     }
   }

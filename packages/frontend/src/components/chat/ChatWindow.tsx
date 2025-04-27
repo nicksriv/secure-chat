@@ -1,48 +1,40 @@
 // components/chat/ChatWindow.tsx
-import { useEffect, useRef, useState } from 'react';
-import { IoSend } from 'react-icons/io5';
+import { FC, useEffect, useRef, useState } from 'react';
 import { useMessageStore } from '../../stores/messageStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useGroupStore } from '../../stores/groupStore';
-import { EmojiPicker } from './EmojiPicker';
 import { ChatHeader } from './ChatHeader';
 import { ChatMessages } from './ChatMessages';
-import { MessageItem } from './MessageItem';
 import { MessageInput } from './MessageInput';
 
-export const ChatWindow = () => {
-  const [message, setMessage] = useState('');
-  const [isLocalTyping, setIsLocalTyping] = useState(false);
-  const messageEndRef = useRef<HTMLDivElement>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const hasFetchedRef = useRef<string | null>(null);
-
+export const ChatWindow: FC = () => {
+  const { selectedGroup } = useGroupStore();
   const { 
     messages, 
     loading, 
     error, 
-    sendMessage, 
     fetchMessages, 
-    smartReplies, 
+    sendMessage, 
+    setTypingStatus, 
+    typingUsers, 
     getSmartReplies, 
-    setTypingStatus,
-    joinGroup,
-    leaveGroup 
+    smartReplies, 
+    clearSmartReplies 
   } = useMessageStore();
-  
   const { user } = useAuthStore();
-  const { selectedGroup } = useGroupStore();
+  const [message, setMessage] = useState('');
+  const [isLocalTyping, setIsLocalTyping] = useState(false);
+  const messageEndRef = useRef<HTMLDivElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null); // Reference to the input field
 
   // Handle message fetching and socket group join
   useEffect(() => {
     if (selectedGroup) {
       // Only fetch if we haven't fetched for this group yet
-      if (hasFetchedRef.current !== selectedGroup._id) {
-        fetchMessages(selectedGroup._id);
-        hasFetchedRef.current = selectedGroup._id;
-      }
+      fetchMessages(selectedGroup._id);
       // Join the socket room for this group
-      joinGroup(selectedGroup._id);
+      useMessageStore.getState().joinGroup(selectedGroup._id);
       // Update selected group in message store to clear unread counts
       useMessageStore.getState().setSelectedGroupId(selectedGroup._id);
     }
@@ -50,7 +42,7 @@ export const ChatWindow = () => {
     // Cleanup: Leave the socket room when component unmounts or group changes
     return () => {
       if (selectedGroup) {
-        leaveGroup(selectedGroup._id);
+        useMessageStore.getState().leaveGroup(selectedGroup._id);
         // Clear selected group when leaving
         useMessageStore.getState().setSelectedGroupId(null);
       }
@@ -100,7 +92,7 @@ export const ChatWindow = () => {
     }, 2000);
   };
 
-  const handleSmartReply = async (messageId: string) => {
+  const handleRequestSmartReply = async (messageId: string) => {
     try {
       await getSmartReplies(messageId);
     } catch (error) {
@@ -110,6 +102,16 @@ export const ChatWindow = () => {
 
   const handleSelectEmoji = (emoji: string) => {
     setMessage(prevMessage => prevMessage + emoji);
+  };
+
+  const handleSelectSmartReply = (text: string) => {
+    setMessage(text); // Set the message input state with the selected reply
+    clearSmartReplies(); // Clear replies after selection
+    
+    // Focus the input field after a small delay to ensure state updates first
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 10);
   };
 
   if (!selectedGroup) {
@@ -133,22 +135,23 @@ export const ChatWindow = () => {
   );
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-lg shadow-lg overflow-hidden">
+    <div className="flex flex-col h-full bg-white">
       <ChatHeader />
-      
-      <div className="flex-1 min-h-0"> {/* min-h-0 is crucial for nested flex containers */}
-        <ChatMessages 
-          messages={messages}
-          smartReplies={smartReplies}
-          messageEndRef={messageEndRef}
-          onSelectSmartReply={text => setMessage(text)}
-          onRequestSmartReply={handleSmartReply}
-        />
-      </div>
-
-      <div className="border-t">
-        <MessageInput selectedGroupId={selectedGroup._id} />
-      </div>
+      <ChatMessages 
+        messages={messages} 
+        smartReplies={smartReplies}
+        messageEndRef={messageEndRef} 
+        onSelectSmartReply={handleSelectSmartReply}
+        onRequestSmartReply={handleRequestSmartReply}
+      />
+      <MessageInput 
+        message={message} 
+        setMessage={setMessage} 
+        onSendMessage={handleSendMessage} 
+        onTyping={handleTyping}
+        onSelectEmoji={handleSelectEmoji}
+        inputRef={inputRef}
+      />
     </div>
   );
 };
