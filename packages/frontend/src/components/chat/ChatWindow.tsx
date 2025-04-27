@@ -43,12 +43,16 @@ export const ChatWindow = () => {
       }
       // Join the socket room for this group
       joinGroup(selectedGroup._id);
+      // Update selected group in message store to clear unread counts
+      useMessageStore.getState().setSelectedGroupId(selectedGroup._id);
     }
     
     // Cleanup: Leave the socket room when component unmounts or group changes
     return () => {
       if (selectedGroup) {
         leaveGroup(selectedGroup._id);
+        // Clear selected group when leaving
+        useMessageStore.getState().setSelectedGroupId(null);
       }
     };
   }, [selectedGroup?._id]);

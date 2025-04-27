@@ -8,6 +8,7 @@ interface Props {
   onActionClick: (e: React.MouseEvent) => void;
   actionLabel: string;
   actionColor: string;
+  unreadCount?: number;
 }
 
 export const GroupItem: React.FC<Props> = ({
@@ -17,6 +18,7 @@ export const GroupItem: React.FC<Props> = ({
   onActionClick,
   actionLabel,
   actionColor,
+  unreadCount = 0,
 }) => {
   const initials = group.name
     .split(' ')
@@ -31,7 +33,7 @@ export const GroupItem: React.FC<Props> = ({
     >
       <div className="flex items-center space-x-3">
         {/* Avatar with fallback to initials */}
-        <div className="w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold text-sm overflow-hidden">
+        <div className="relative w-10 h-10 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold text-sm overflow-hidden">
           {group.avatarUrl ? (
             <img
               src={group.avatarUrl}
@@ -44,6 +46,13 @@ export const GroupItem: React.FC<Props> = ({
             />
           ) : (
             initials
+          )}
+          
+          {/* Unread count badge */}
+          {unreadCount > 0 && (
+            <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </div>
           )}
         </div>
 

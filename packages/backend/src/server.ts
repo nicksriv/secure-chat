@@ -38,7 +38,7 @@ interface TypingEvent {
 
 interface MessageEvent {
   groupId: string;
-  message: string;
+  message: any; // Using any for now as the message structure is complex
 }
 
 // Socket connection handler with error recovery
@@ -87,12 +87,18 @@ const handleSocketConnection = (socket: any) => {
   // Message events with error handling
   socket.on('send_message', async (data: MessageEvent) => {
     try {
-      // Forward the complete message object to all clients in the group
-      socket.to(data.groupId).emit('receive_message', {
+      console.log(`Broadcasting message to group ${data.groupId}`, data.message);
+      
+      // Make sure group ID is a string for socket.io rooms
+      const roomId = String(data.groupId);
+      
+      // Broadcast the message to ALL clients in the group including metadata
+      io.to(roomId).emit('receive_message', {
         ...data.message,
+        groupId: data.groupId,  // Ensure groupId is included
         timestamp: new Date(),
         senderId: socket.data.user.userId,
-        senderName: socket.data.user.email
+        senderName: socket.data.user.email || 'User'
       });
     } catch (error) {
       console.error('Error sending message:', error);
@@ -111,6 +117,22 @@ const handleSocketConnection = (socket: any) => {
     } catch (error) {
       console.error('Error handling typing event:', error);
       // Don't emit error for typing events as they're not critical
+    }
+  });
+
+  // Add socket event for message read status
+  socket.on('mark_read', async (data: { messageId: string, groupId: string }) => {
+    try {
+      console.log(`User ${socket.data.user.email} marked message ${data.messageId} as read`);
+      
+      // Broadcast read status to all clients in the group
+      io.to(data.groupId).emit('message_read', {
+        messageId: data.messageId,
+        userId: socket.data.user.userId,
+        userName: socket.data.user.email
+      });
+    } catch (error) {
+      console.error('Error marking message as read:', error);
     }
   });
 };

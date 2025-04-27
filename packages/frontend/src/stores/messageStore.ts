@@ -11,6 +11,8 @@ interface MessageState {
   socketError: string | null;
   typingUsers: Set<string>;
   smartReplies: SmartReply[];
+  unreadMessagesByGroup: Record<string, Message[]>;
+  selectedGroupId: string | null;
   initializeSocket: () => void;
   disconnectSocket: () => void;
   reconnectSocket: () => void;
@@ -22,6 +24,9 @@ interface MessageState {
   setTyping: (groupId: string, userId: string) => void;
   getSmartReplies: (messageId: string) => Promise<void>;
   setTypingStatus: (groupId: string, isTyping: boolean) => void;
+  getUnreadCountForGroup: (groupId: string) => number;
+  markAllAsReadInGroup: (groupId: string) => Promise<void>;
+  setSelectedGroupId: (groupId: string | null) => void;
 }
 
 export const useMessageStore = create<MessageState>((set, get) => ({
@@ -32,6 +37,8 @@ export const useMessageStore = create<MessageState>((set, get) => ({
   socketError: null,
   typingUsers: new Set(),
   smartReplies: [],
+  unreadMessagesByGroup: {},
+  selectedGroupId: null,
 
   initializeSocket: () => {
     const token = localStorage.getItem('token');
@@ -73,16 +80,53 @@ export const useMessageStore = create<MessageState>((set, get) => ({
     });
 
     socket.on('receive_message', (message: Message) => {
-      // Ensure message has all required fields
+      console.log('Received message:', message);
+      
+      // Ensure message has all required fields 
       const updatedMessage = {
         ...message,
         readBy: message.readBy || [message.senderId],
-        senderName: message.senderName || 'User'
+        senderName: message.senderName || message.email || 'User'
       };
       
-      set(state => ({
-        messages: [...state.messages, updatedMessage]
-      }));
+      const userId = localStorage.getItem('userId');
+      const { selectedGroupId } = get();
+      
+      // Check if this message is from the current user
+      const isOwnMessage = updatedMessage.senderId === userId || 
+        (typeof updatedMessage.senderId === 'object' && updatedMessage.senderId?._id === userId);
+        
+      // Check if this message is for the currently selected group
+      const isCurrentGroup = updatedMessage.groupId === selectedGroupId;
+      
+      set(state => {
+        // Check if message already exists to prevent duplicates
+        if (state.messages.some(m => m._id === updatedMessage._id)) {
+          return state;
+        }
+        
+        // Add to unread messages if it's not the current group and not sent by current user
+        const newUnreadMessagesByGroup = { ...state.unreadMessagesByGroup };
+        
+        if (!isOwnMessage && !isCurrentGroup) {
+          const groupUnreads = newUnreadMessagesByGroup[updatedMessage.groupId] || [];
+          newUnreadMessagesByGroup[updatedMessage.groupId] = [...groupUnreads, updatedMessage];
+          console.log(`Added unread message to group ${updatedMessage.groupId}`, 
+            newUnreadMessagesByGroup[updatedMessage.groupId].length);
+        }
+
+        // Add to current messages if it's the selected group
+        const newMessages = isCurrentGroup 
+          ? [...state.messages, updatedMessage].sort((a, b) => 
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            )
+          : state.messages;
+          
+        return {
+          messages: newMessages,
+          unreadMessagesByGroup: newUnreadMessagesByGroup
+        };
+      });
     });
 
     socket.on('user_typing', ({ userId }) => {
@@ -99,6 +143,20 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         }, 2000);
         return { typingUsers: newTypingUsers };
       });
+    });
+
+    // Add handler for message_read socket event
+    socket.on('message_read', (data: { messageId: string, userId: string, userName: string }) => {
+      console.log('Message read by:', data);
+      
+      // Update the readBy array for this message
+      set(state => ({
+        messages: state.messages.map(msg =>
+          msg._id === data.messageId && !msg.readBy.includes(data.userId)
+            ? { ...msg, readBy: [...msg.readBy, data.userId] }
+            : msg
+        )
+      }));
     });
 
     set({ socket });
@@ -198,15 +256,30 @@ export const useMessageStore = create<MessageState>((set, get) => ({
 
   markAsRead: async (messageId: string) => {
     try {
+      const userId = localStorage.getItem('userId');
+      const { socket, selectedGroupId } = get();
+      
+      // Save to backend
       await messageService.markAsRead(messageId);
+      
+      // Update local state
       set(state => ({
         messages: state.messages.map(msg =>
-          msg._id === messageId
-            ? { ...msg, readBy: [...msg.readBy, get().socket?.id || ''] }
+          msg._id === messageId && !msg.readBy.includes(userId!)
+            ? { ...msg, readBy: [...msg.readBy, userId!] }
             : msg
         )
       }));
+      
+      // Broadcast to other users that this message was read
+      if (socket && selectedGroupId) {
+        socket.emit('mark_read', { 
+          messageId, 
+          groupId: selectedGroupId 
+        });
+      }
     } catch (error) {
+      console.error('Failed to mark message as read:', error);
       set({ error: 'Failed to mark message as read' });
     }
   },
@@ -251,6 +324,40 @@ export const useMessageStore = create<MessageState>((set, get) => ({
         newTypingUsers.delete(userId);
         return { typingUsers: newTypingUsers };
       });
+    }
+  },
+
+  getUnreadCountForGroup: (groupId: string) => {
+    const { unreadMessagesByGroup } = get();
+    return unreadMessagesByGroup[groupId]?.length || 0;
+  },
+
+  markAllAsReadInGroup: async (groupId: string) => {
+    const { unreadMessagesByGroup } = get();
+    const unreadMessages = unreadMessagesByGroup[groupId] || [];
+    
+    try {
+      // Mark all unread messages as read in the backend
+      const promises = unreadMessages.map(msg => messageService.markAsRead(msg._id));
+      await Promise.all(promises);
+      
+      // Remove the unread messages for this group
+      set(state => {
+        const newUnreadMessagesByGroup = { ...state.unreadMessagesByGroup };
+        delete newUnreadMessagesByGroup[groupId];
+        return { unreadMessagesByGroup: newUnreadMessagesByGroup };
+      });
+    } catch (error) {
+      console.error('Failed to mark messages as read:', error);
+    }
+  },
+
+  setSelectedGroupId: (groupId: string | null) => {
+    set({ selectedGroupId: groupId });
+    
+    // If selecting a group, mark all messages as read in that group
+    if (groupId) {
+      get().markAllAsReadInGroup(groupId);
     }
   }
 }));

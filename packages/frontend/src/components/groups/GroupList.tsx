@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useGroupStore } from '../../stores/groupStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useMessageStore } from '../../stores/messageStore';
 import { Group } from '../../types';
 import { MdAdd, MdExitToApp } from 'react-icons/md';
 import { GroupItem } from './GroupItem';
@@ -18,8 +19,11 @@ export const GroupList = () => {
     joinGroup,
     leaveGroup,
     selectGroup,
+    selectedGroup,
     createGroup
   } = useGroupStore();
+  
+  const { getUnreadCountForGroup, setSelectedGroupId } = useMessageStore();
   const navigate = useNavigate();
   const user = useAuthStore((state) => state.user);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -57,6 +61,12 @@ export const GroupList = () => {
     navigate('/login'); // Redirect to login page
   };
 
+  const handleSelectGroup = (group: Group) => {
+    selectGroup(group);
+    // Update the selected group ID in the message store to mark messages as read
+    setSelectedGroupId(group._id);
+  };
+
   const visibleGroups = sortedGroups.slice(0, displayCount);
 
   return (
@@ -88,19 +98,22 @@ export const GroupList = () => {
               {visibleGroups.map((group) => {
                 const isMember = group.members.includes(user?._id || '');
                 const isOwner = group.ownerId === user?._id;
+                const isSelected = selectedGroup?._id === group._id;
+                const unreadCount = !isSelected ? getUnreadCountForGroup(group._id) : 0;
 
                 return (
                   <GroupItem
                     key={group._id}
                     group={group}
                     isMember={isMember}
-                    onClick={() => isMember ? selectGroup(group) : {}}
+                    onClick={() => isMember ? handleSelectGroup(group) : {}}
                     onActionClick={(e) => {
                       e.stopPropagation();
                       isMember ? handleLeaveGroup(group) : handleJoinGroup(group);
                     }}
                     actionLabel={isMember ? (isOwner ? '' : 'Leave') : 'Join'}
                     actionColor={isMember ? 'text-red-500 hover:text-red-600' : 'text-green-600 hover:text-green-700'}
+                    unreadCount={unreadCount}
                   />
                 );
               })}
